@@ -1,18 +1,70 @@
 import numpy as np
+import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
-# Geração de dataset artificial multivariado
-N = 301  # número de amostras
-window_size = 20
-t = np.linspace(0, 300, N)
-x = np.sin(2 * np.pi * t / 10) + 0.1 * np.random.randn(N)
-y = np.sin(2 * np.pi * t / 20) + 0.1 * np.random.randn(N)
-z = np.cos(2 * np.pi * t / 15) + 0.1 * np.random.randn(N)
+
+# Leitura e tratamento do arquivo CSV
+
+df = pd.read_csv(
+    r"C:\Users\Leane\Documents\report-file-1.csv.csv",
+    sep=r"\s+",
+    skiprows=3,
+    header=None,
+    engine="python"
+)
+
+
+df.columns = [
+    "TimeStep",
+    "flow_time",
+    "delta_time",
+    "iters_per_timestep",
+    "mon_x",
+    "mon_sacarose",
+    "mon_glicose",
+    "mon_etanol"
+]
+
+df = df.replace(
+    {
+        '"': '',
+        r'\(': '',
+        r'\)': ''
+    },
+    regex=True
+)
+
+df = df[
+    [
+        "flow_time",
+        "mon_sacarose",
+        "mon_glicose",
+        "mon_etanol"
+    ]
+]
+
+
+df = df.astype(float)
+
+print(df.head())
+
+# Converte para numpy array
+
+data = df.values
+
+print("Shape original:", data.shape)
+
+t = df["flow_time"].values
+x = df["mon_sacarose"].values
+y = df["mon_glicose"].values
+z = df["mon_etanol"].values 
+N = len(x)
 data = np.column_stack([x, y, z])
 
+window_size = 20
 # Normalização
 scaler = MinMaxScaler()
 data_scaled = scaler.fit_transform(data)
@@ -110,4 +162,5 @@ with torch.no_grad():
     y_test_rescaled = scaler.inverse_transform(y_test)
     print("Predições (rescaladas):", predictions_rescaled[:5])
     print("Valores reais (rescalados):", y_test_rescaled[:5])      
+
 
