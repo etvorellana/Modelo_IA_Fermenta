@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from sklearn.preprocessing import MinMaxScaler
 import torch
 import torch.nn as nn
@@ -9,7 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 # Leitura e tratamento do arquivo CSV
 
 df = pd.read_csv(
-    r"C:\Users\Leane\Documents\report-file-1.csv.csv",
+    r"report-file-1.csv",
     sep=r"\s+",
     skiprows=3,
     header=None,
@@ -161,6 +162,44 @@ with torch.no_grad():
     predictions_rescaled = scaler.inverse_transform(predictions)
     y_test_rescaled = scaler.inverse_transform(y_test)
     print("Predições (rescaladas):", predictions_rescaled[:5])
-    print("Valores reais (rescalados):", y_test_rescaled[:5])      
+    print("Valores reais (rescalados):", y_test_rescaled[:5])  
+
+    print("Predições (rescaladas):", predictions_rescaled[-5:])
+    print("Valores reais (rescalados):", y_test_rescaled[-5:])    
+
+# Salvamento dos artefatos
+output_dir = Path("artifacts")
+output_dir.mkdir(exist_ok=True)
+
+model_path = output_dir / "modelo_treinado.pth"
+torch.save(
+    {
+        "model_state_dict": model.state_dict(),
+        "input_size": 3,
+        "hidden_size": 50,
+        "num_layers": 1,
+        "output_size": 3,
+        "window_size": window_size,
+    },
+    model_path,
+)
+
+inference_mse = np.mean((predictions_rescaled - y_test_rescaled) ** 2, axis=1)
+results_df = pd.DataFrame(
+    {
+        "pred_mon_sacarose": predictions_rescaled[:, 0],
+        "pred_mon_glicose": predictions_rescaled[:, 1],
+        "pred_mon_etanol": predictions_rescaled[:, 2],
+        "esperado_mon_sacarose": y_test_rescaled[:, 0],
+        "esperado_mon_glicose": y_test_rescaled[:, 1],
+        "esperado_mon_etanol": y_test_rescaled[:, 2],
+        "mse": inference_mse,
+    }
+)
+results_path = output_dir / "inferencias_teste.csv"
+results_df.to_csv(results_path, index=False)
+
+print(f"Modelo salvo em: {model_path}")
+print(f"Inferências salvas em: {results_path}")
 
 
