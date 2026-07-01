@@ -8,7 +8,8 @@ from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, Dataset
 
 
-CSV_PATH = Path("report-file-1.csv")
+#CSV_PATH = Path("report-file-1.csv")
+CSV_PATH = Path("interpolated_N20_data.csv")
 OUTPUT_DIR = Path("artifacts_time")
 WINDOW_SIZE = 20
 BATCH_SIZE = 32
@@ -122,38 +123,32 @@ def forecast_future_steps(
     history = last_history_features.copy()
     forecasts = []
 
+    # Aceita entrada como array 1D (n,) ou 2D (n, 1).
+    future_flow_scaled = np.asarray(future_flow_scaled).reshape(-1)
+
     with torch.no_grad():
-        for future_t_scaled in future_flow_scaled:
+        for next_flow_scaled in future_flow_scaled:
             hist_tensor = torch.FloatTensor(history[None, :, :]).to(device)
-            t_tensor = torch.FloatTensor([[future_t_scaled]]).to(device)
-            predicted_state_scaled = model(hist_tensor, t_tensor).cpu().numpy()
+            flow_tensor = torch.FloatTensor([[next_flow_scaled]]).to(device)
+
+            predicted_state_scaled = model(hist_tensor, flow_tensor).cpu().numpy()
             predicted_state = inverse_state(state_scaler, predicted_state_scaled)
             forecasts.append(predicted_state[0])
 
-            last_row = history[-1].copy()
-            last_flow_scaled = last_row[3]
-            
-
-            last_flow = flow_scaler.inverse_transform([[last_flow_scaled]])[0, 0]
-            future_dt = delta_scaler.inverse_transform([[future_dt_scaled]])[0, 0]
-            next_flow = last_flow + future_dt
-
-            next_flow_scaled = flow_scaler.transform([[next_flow]])[0, 0]
+            # Próxima linha do histórico: estado previsto + flow_time futuro informado.
             next_row = np.array(
                 [
                     predicted_state_scaled[0, 0],
                     predicted_state_scaled[0, 1],
                     predicted_state_scaled[0, 2],
                     next_flow_scaled,
-                    future_dt_scaled,
                 ]
             )
-
             history = np.vstack([history[1:], next_row])
 
     return np.array(forecasts)
 
-
+ 
 def main():
     df = load_data(CSV_PATH)
 
@@ -190,7 +185,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = nn.MSELoss()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
     for epoch in range(NUM_EPOCHS):
@@ -248,8 +243,8 @@ def main():
     )
 
     OUTPUT_DIR.mkdir(exist_ok=True)
-    model_path = OUTPUT_DIR / "modelo_temporal_2.pth"
-    results_path = OUTPUT_DIR / "inferencias_temporais_2.csv"
+    model_path = OUTPUT_DIR / "modelo_temporal_3.pth"
+    results_path = OUTPUT_DIR / "inferencias_temporais_3.csv"
 
     torch.save(
         {
@@ -267,25 +262,6 @@ def main():
 
     print(f"Modelo temporal salvo em: {model_path}")
     print(f"Inferências de teste salvas em: {results_path}")
-
-    # Exemplo de uso para passos futuros: use os deltas reais ou escolhidos pelo usuário.
-    future_flow_raw = df["flow_time"].tail(5).values.reshape(-1, 1)
-    future_flow_scaled = flow_scaler.transform(future_flow_raw).reshape(-1)
-    last_history = X_hist[-1]
-    future_forecasts = forecast_future_steps(
-        model,
-        last_history,
-        future_flow_scaled,
-        state_scaler,
-        flow_scaler,
-        device,
-    )
-    forecast_df = pd.DataFrame(
-        future_forecasts,
-        columns=["mon_sacarose", "mon_glicose", "mon_etanol"],
-    )
-    forecast_df.to_csv(OUTPUT_DIR / "forecast_passos_futuros.csv", index=False)
-    print(f"Forecast futuro salvo em: {OUTPUT_DIR / 'forecast_passos_futuros.csv'}")
 
 
 if __name__ == "__main__":
